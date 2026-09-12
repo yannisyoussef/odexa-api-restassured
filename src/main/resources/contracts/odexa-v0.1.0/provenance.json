@@ -1,0 +1,12 @@
+{
+  "repository": "https://github.com/yannisyoussef/odexa",
+  "tag": "v0.1.0",
+  "commit": "fac40f94377901419da4e1f26b99148ff5f550bf",
+  "sourceDirectory": "contracts/openapi",
+  "sha256": {
+    "catalog.json": "eba89857530bc0539a4091743f41bcdf1101db71febb273053dc7d0d4347ebd6",
+    "inventory.json": "f764d4df4293c3b61ec777775a5162cf2633fe103a4ad84911f99eef60f820d4",
+    "order.json": "b79a96be1b9e7d6d975c034f25dda654a0fbf9dd29ea485542e12cc79f020ac6",
+    "payment.json": "81d1e5b65cddee54b3b0904f6bf7652f74119b8bcbd30bb28fd5153a75a91973"
+  }
+}

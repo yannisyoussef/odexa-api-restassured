@@ -1,0 +1,96 @@
+name: QA checks
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      target_version:
+        description: 'Exact Odexa release tag (v0.1.0 is SHA-verified)'
+        type: string
+        required: false
+        default: v0.1.0
+
+permissions:
+  contents: read
+
+concurrency:
+  group: qa-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  fast:
+    name: Java 25 and boundary checks
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '25'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - uses: gradle/actions/setup-gradle@v4
+      - name: HTTP-only source and dependency boundary
+        run: python3 -B scripts/check-boundaries.py
+      - name: Isolated orchestration unit tests (no Docker)
+        run: python3 -B -m unittest discover -s scripts/tests -p 'test_*.py' -v
+      - name: Compile, Spotless, and framework unit tests
+        run: ./gradlew --no-daemon --no-configuration-cache --console=plain spotlessCheck check
+      - name: Upload QA unit reports only
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: qa-unit-reports
+          if-no-files-found: ignore
+          retention-days: 7
+          path: |
+            build/test-results/test/*.xml
+            build/reports/tests/test/
+            build/allure-results/test/
+
+  api:
+    name: Black-box API against a pinned LOCAL release
+    needs: fast
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    env:
+      # Input is passed as environment data, never interpolated into a shell command.
+      ODEXA_VERSION: ${{ inputs.target_version || 'v0.1.0' }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '25'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Verify Docker tooling
+        run: |
+          docker version --format '{{.Server.Version}}'
+          docker compose version --short
+      - name: Bootstrap product, check readiness, run QA, and remove owned volumes
+        # The script traps cooperative cancellation and cleans up on all lifecycle failures.
+        # Fixed product ports require this exclusive hosted runner; no existing dev target is used.
+        run: python3 -B scripts/local-ci.py
+      - name: Upload only QA results and allowlisted metadata
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: qa-api-reports
+          if-no-files-found: ignore
+          retention-days: 7
+          path: |
+            build/test-results/apiTest/*.xml
+            build/reports/tests/apiTest/
+            build/allure-results/apiTest/
+            build/diagnostics/local-target.json
