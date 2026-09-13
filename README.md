@@ -8,9 +8,9 @@ Java 25 · Gradle Kotlin DSL · Rest Assured 6 · JUnit 5 · Jackson · AssertJ 
 
 ## Architecture
 
-JUnit scenarios → domain clients → fresh Rest Assured specifications → Odexa's public gateway. A separate OIDC client supplies per-actor cached tokens and refreshes them before expiry. Responses remain available as Rest Assured responses; domain assertions complement, rather than hide, HTTP status/header checks.
+JUnit scenarios → domain clients → fresh Rest Assured specifications → Odexa's public gateway. A separate OIDC client supplies per-actor cached tokens and refreshes them before expiry. Parallel classes share one session per identity, so a fixture user is never authenticated concurrently—identity providers can treat that as a credential attack. Responses remain available as Rest Assured responses; domain assertions complement, rather than hide, HTTP status/header checks.
 
-- `config/`, `auth/`: explicit LOCAL/REMOTE targets and four real v0.1.0 identities; no global tokens.
+- `config/`, `auth/`: explicit LOCAL/REMOTE targets and four real v0.1.0 identities; one session per identity, never a global or cross-actor token.
 - `http/`, `diagnostics/`: bounded requests, disabled redirects/write retries, UUID correlations, sanitized failures and metadata-only structured logs/Allure attachments.
 - `client/`, `model/`, `data/`: small hand-written clients, records and immutable checkout variants.
 - `assertion/`, `wait/`, `fixture/`: Problem Details assertions, bounded eventual-state polling and conservative public-API stock restoration.

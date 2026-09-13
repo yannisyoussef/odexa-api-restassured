@@ -5,13 +5,11 @@ import static org.awaitility.Awaitility.await;
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 import io.restassured.http.ContentType;
-import java.time.Clock;
 import java.time.Duration;
 import java.util.EnumMap;
 import java.util.Map;
-import qa.odexa.auth.AuthClient;
+import qa.odexa.auth.ActorSessions;
 import qa.odexa.auth.AuthenticatedSession;
-import qa.odexa.auth.TokenProvider;
 import qa.odexa.client.CatalogClient;
 import qa.odexa.client.InventoryClient;
 import qa.odexa.client.OrderClient;
@@ -23,7 +21,10 @@ import qa.odexa.http.ApiHttp;
 import qa.odexa.http.ApiResponse;
 import qa.odexa.model.Inventory;
 
-/** Per-class clients, with no discovery-time configuration or global authentication state. */
+/**
+ * Per-class clients and transport, with no discovery-time configuration. Only the session of an
+ * identity is shared across classes, so one fixture user is never authenticated concurrently.
+ */
 final class ApiContext {
   private final TargetConfig config;
   private final FixtureMutationSafety.FailureLatch mutationSafety;
@@ -36,9 +37,9 @@ final class ApiContext {
     http = new ApiHttp(config);
     Map<Actor, ActorClients> clients = new EnumMap<>(Actor.class);
     for (Actor actor : requiredActors) {
-      AuthClient auth = new AuthClient(config);
-      TokenProvider tokens = new TokenProvider(auth, config.credentials(actor), Clock.systemUTC());
-      AuthenticatedSession session = new AuthenticatedSession(actor, tokens);
+      // Test classes run in parallel: one shared session per identity keeps this suite from
+      // authenticating the same fixture user concurrently. See ActorSessions.
+      AuthenticatedSession session = ActorSessions.suite().forActor(config, actor);
       clients.put(
           actor,
           new ActorClients(
