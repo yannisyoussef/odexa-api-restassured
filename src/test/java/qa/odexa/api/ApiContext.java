@@ -18,6 +18,7 @@ import qa.odexa.client.OrderClient;
 import qa.odexa.client.PaymentClient;
 import qa.odexa.config.Actor;
 import qa.odexa.config.TargetConfig;
+import qa.odexa.fixture.FixtureMutationSafety;
 import qa.odexa.http.ApiHttp;
 import qa.odexa.http.ApiResponse;
 import qa.odexa.model.Inventory;
@@ -25,11 +26,13 @@ import qa.odexa.model.Inventory;
 /** Per-class clients, with no discovery-time configuration or global authentication state. */
 final class ApiContext {
   private final TargetConfig config;
+  private final FixtureMutationSafety.FailureLatch mutationSafety;
   private final ApiHttp http;
   private final Map<Actor, ActorClients> actors;
 
   private ApiContext(TargetConfig config, Actor... requiredActors) {
     this.config = config;
+    mutationSafety = FixtureMutationSafety.forTarget(config);
     http = new ApiHttp(config);
     Map<Actor, ActorClients> clients = new EnumMap<>(Actor.class);
     for (Actor actor : requiredActors) {
@@ -41,7 +44,7 @@ final class ApiContext {
           new ActorClients(
               new CatalogClient(http, session),
               new InventoryClient(http, session),
-              new OrderClient(http, session),
+              new OrderClient(http, session, mutationSafety),
               new PaymentClient(http, session)));
     }
     actors = Map.copyOf(clients);
@@ -51,6 +54,10 @@ final class ApiContext {
   static ApiContext load(Actor... actors) {
     TargetConfig config = TargetConfig.fromEnvironment();
     writeReportContext(config);
+    return forConfig(config, actors);
+  }
+
+  static ApiContext forConfig(TargetConfig config, Actor... actors) {
     return new ApiContext(config, actors);
   }
 
@@ -107,6 +114,9 @@ final class ApiContext {
     assumeTrue(
         config.allowMutation() && config.exclusiveFixtures(),
         "Mutations require ODEXA_ALLOW_MUTATION and ODEXA_EXCLUSIVE_FIXTURES");
+    assumeTrue(
+        !mutationSafety.isBlocked(),
+        "Mutations blocked after uncertain fixture cleanup for this target and product");
   }
 
   void awaitInventory(InventoryClient merchantInventory, long onHand, long reserved, long version) {

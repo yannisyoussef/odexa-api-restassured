@@ -25,7 +25,7 @@ import qa.odexa.wait.OrderAwaiter;
  * lock. Use the supplied OrderClient for every checkout while acquired, and join all checkout tasks
  * before close. Orders remain retained: v0.1.0 has no public delete/cancel operation. Uncertain
  * workflows or foreign stock/version changes deliberately leave inventory untouched and fail
- * cleanup. An unsafe cleanup also blocks further checkouts/fixtures on that OrderClient, so a
+ * cleanup. An unsafe cleanup blocks later mutations for the same suite target and product, so a
  * following test cannot overwrite stock while an earlier uncertain workflow may still arrive.
  */
 public final class StockFixture implements AutoCloseable {
@@ -33,6 +33,7 @@ public final class StockFixture implements AutoCloseable {
   private static final Set<Integer> REJECTED_WITHOUT_CREATION =
       Set.of(400, 401, 403, 404, 409, 415, 422);
   private final TargetConfig config;
+  private final FixtureMutationSafety.FailureLatch mutationSafety;
   private final InventoryClient inventory;
   private final OrderAwaiter awaiter;
   private final OrderClient.CreationJournal journal;
@@ -46,6 +47,7 @@ public final class StockFixture implements AutoCloseable {
 
   private StockFixture(
       TargetConfig config,
+      FixtureMutationSafety.FailureLatch mutationSafety,
       InventoryClient inventory,
       OrderClient orders,
       OrderClient.CreationJournal journal,
@@ -54,6 +56,7 @@ public final class StockFixture implements AutoCloseable {
       Inventory setup,
       ApiResponse setupResponse) {
     this.config = config;
+    this.mutationSafety = mutationSafety;
     this.inventory = inventory;
     this.awaiter = new OrderAwaiter(orders, config);
     this.journal = journal;
@@ -77,6 +80,8 @@ public final class StockFixture implements AutoCloseable {
     }
     Objects.requireNonNull(merchantInventory, "merchantInventory");
     Objects.requireNonNull(customerOrders, "customerOrders");
+    FixtureMutationSafety.FailureLatch mutationSafety = FixtureMutationSafety.forTarget(config);
+    mutationSafety.requireSafe();
     OrderClient.CreationJournal journal = customerOrders.openCreationJournal();
     boolean acquired = false;
     boolean writeAttempted = false;
@@ -99,6 +104,7 @@ public final class StockFixture implements AutoCloseable {
       StockFixture fixture =
           new StockFixture(
               config,
+              mutationSafety,
               merchantInventory,
               customerOrders,
               journal,
@@ -112,6 +118,7 @@ public final class StockFixture implements AutoCloseable {
       if (!acquired) {
         // Never retry or blindly undo a PUT whose outcome may be ambiguous.
         if (writeAttempted) {
+          mutationSafety.block();
           journal.abandon();
         }
         journal.close();
@@ -243,6 +250,7 @@ public final class StockFixture implements AutoCloseable {
       safelyRestored = true;
     } finally {
       if (!safelyRestored) {
+        mutationSafety.block();
         journal.abandon();
       }
       journal.close();

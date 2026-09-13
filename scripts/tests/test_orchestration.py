@@ -243,12 +243,16 @@ class LifecycleTests(unittest.TestCase):
         self.assertEqual(1, self.run_target())
         self.assertFalse(any("scripts/bootstrap-local.py" in c[0] for c in self.calls))
 
-    def test_later_release_records_actual_commit_without_inventing_hash(self):
-        self.commit = self.head = "a" * 40
-        self.assertEqual(0, self.run_target(version="v0.2.0"))
-        self.assertEqual("a" * 40, self.metadata["commit"])
-        self.assertEqual("v0.2.0", self.metadata["version"])
-        self.assert_owned_down()
+    def test_unallowlisted_release_is_rejected_before_any_actions(self):
+        with (patch.object(local, "docker_endpoint_preflight") as preflight,
+              patch.object(local.OwnedTarget, "create") as create,
+              redirect_stdout(self.output), redirect_stderr(self.output)):
+            self.assertEqual(1, local.run_isolated("v0.2.0", qa_root=self.qa))
+        preflight.assert_not_called()
+        create.assert_not_called()
+        metadata = json.loads((self.qa / "build/diagnostics/local-target.json").read_text())
+        self.assertEqual("target-version", metadata["failure_stage"])
+        self.assertEqual("not-created", metadata["cleanup"])
 
     def test_invalid_version_is_not_executed_or_printed(self):
         with patch.object(local.OwnedTarget, "create") as create:
@@ -407,7 +411,8 @@ class DockerEndpointTests(unittest.TestCase):
 
 class SafetyTests(unittest.TestCase):
     def test_rejects_arbitrary_refs(self):
-        for value in ("main", "--help", "../v0.1.0", "v0.1.0;echo", "v0.1.0\n", "v1.2", "v1.2.3-rc1", ""):
+        for value in ("v0.2.0", "main", "--help", "../v0.1.0", "v0.1.0;echo", "v0.1.0\n",
+                      "v1.2", "v1.2.3-rc1", ""):
             with self.subTest(value=value), self.assertRaises(local.SafeFailure):
                 local.validate_version(value)
 

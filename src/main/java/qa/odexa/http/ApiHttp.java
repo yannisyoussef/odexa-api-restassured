@@ -3,15 +3,20 @@ package qa.odexa.http;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
-import io.restassured.RestAssured;
-import io.restassured.builder.RequestSpecBuilder;
-import io.restassured.builder.ResponseSpecBuilder;
+import io.restassured.authentication.NoAuthScheme;
 import io.restassured.config.HttpClientConfig;
 import io.restassured.config.RedirectConfig;
 import io.restassured.config.RestAssuredConfig;
 import io.restassured.http.Method;
+import io.restassured.internal.RequestSpecificationImpl;
+import io.restassured.internal.ResponseParserRegistrar;
+import io.restassured.internal.ResponseSpecificationImpl;
+import io.restassured.internal.TestSpecificationImpl;
+import io.restassured.internal.log.LogRepository;
 import io.restassured.response.Response;
 import io.restassured.specification.RequestSpecification;
+import io.restassured.specification.ResponseSpecification;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import org.apache.http.impl.client.DefaultHttpClient;
@@ -74,18 +79,26 @@ public final class ApiHttp {
           config.baseUri().getPort() >= 0
               ? config.baseUri().getPort()
               : ("https".equalsIgnoreCase(config.baseUri().getScheme()) ? 443 : 80);
+      LogRepository logRepository = new LogRepository();
       RequestSpecification request =
-          new RequestSpecBuilder()
-              .setBaseUri(config.baseUri().toString())
-              .setBasePath("")
-              .setPort(port)
-              .setConfig(requestConfig)
-              .setContentType("application/json")
-              .setAccept("application/json")
-              .build()
-              .noFilters()
-              .auth()
-              .none();
+          new RequestSpecificationImpl(
+                  config.baseUri().toString(),
+                  port,
+                  "",
+                  new NoAuthScheme(),
+                  List.of(),
+                  null,
+                  true,
+                  requestConfig,
+                  logRepository,
+                  null,
+                  true,
+                  false)
+              .contentType("application/json")
+              .accept("application/json");
+      ResponseSpecification responseSpec =
+          new ResponseSpecificationImpl(
+              "", null, new ResponseParserRegistrar(), requestConfig, logRepository);
       if (query != null && !query.isEmpty()) {
         request.queryParams(query);
       }
@@ -108,10 +121,8 @@ public final class ApiHttp {
       // No reactive retries: a network failure on a write has an ambiguous outcome.
       request.filter(
           new SafeMetadataFilter(method.name(), path, actor, correlation, config.verbose()));
-      // This explicit two-spec overload uses our sanitized specification directly.
-      // The one-spec overload would merge global defaults and filters back into the request.
-      Response response =
-          RestAssured.given(request, new ResponseSpecBuilder().build()).request(method, path);
+      // Wire the two detached specs directly; RestAssured's builders snapshot mutable globals.
+      Response response = new TestSpecificationImpl(request, responseSpec).request(method, path);
       return new ApiResponse(response, correlation);
     } catch (AuthException safe) {
       throw safe;

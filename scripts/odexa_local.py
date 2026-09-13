@@ -22,7 +22,7 @@ QA_ROOT = Path(__file__).resolve().parents[1]
 PRODUCT_REPOSITORY = "https://github.com/yannisyoussef/odexa.git"
 BASELINE_VERSION = "v0.1.0"
 BASELINE_COMMIT = "fac40f94377901419da4e1f26b99148ff5f550bf"
-VERSION_PATTERN = re.compile(r"v[0-9]+\.[0-9]+\.[0-9]+", re.ASCII)
+TARGET_COMMITS = {BASELINE_VERSION: BASELINE_COMMIT}
 COMMIT_PATTERN = re.compile(r"[0-9a-f]{40}", re.ASCII)
 PROJECT_PATTERN = re.compile(r"odexa-qa-[0-9a-f]{32}", re.ASCII)
 TEMP_PREFIX = "odexa-target-"
@@ -50,7 +50,7 @@ class SafeFailure(Exception):
 
 
 def validate_version(value):
-    if not isinstance(value, str) or not VERSION_PATTERN.fullmatch(value):
+    if not isinstance(value, str) or value not in TARGET_COMMITS:
         raise SafeFailure("invalid-target-version")
     return value
 
@@ -321,8 +321,8 @@ def run_isolated(version=BASELINE_VERSION, *, qa_root=QA_ROOT):
         commit = raw.decode("ascii").strip()
         if not COMMIT_PATTERN.fullmatch(commit):
             raise SafeFailure("invalid-release-commit")
-        if version == BASELINE_VERSION and commit != BASELINE_COMMIT:
-            raise SafeFailure("baseline-pin-mismatch")
+        if commit != TARGET_COMMITS[version]:
+            raise SafeFailure("release-pin-mismatch")
         metadata["commit"] = commit
         stage = "checkout"
         checked(["git", "-c", "core.hooksPath=/dev/null", "checkout", "--detach", commit],

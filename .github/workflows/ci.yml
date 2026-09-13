@@ -7,10 +7,12 @@ on:
   workflow_dispatch:
     inputs:
       target_version:
-        description: 'Exact Odexa release tag (v0.1.0 is SHA-verified)'
-        type: string
+        description: 'SHA-verified Odexa release'
+        type: choice
         required: false
         default: v0.1.0
+        options:
+          - v0.1.0
 
 permissions:
   contents: read
@@ -25,17 +27,17 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: actions/setup-java@v4
+      - uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
         with:
           distribution: temurin
           java-version: '25'
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: '3.13'
-      - uses: gradle/actions/setup-gradle@v4
+      - uses: gradle/actions/setup-gradle@9c971963bec38e04b3d30dcc455b5382be2fdbfb # v6.3.0
       - name: HTTP-only source and dependency boundary
         run: python3 -B scripts/check-boundaries.py
       - name: Isolated orchestration unit tests (no Docker)
@@ -44,7 +46,7 @@ jobs:
         run: ./gradlew --no-daemon --no-configuration-cache --console=plain spotlessCheck check
       - name: Upload QA unit reports only
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: qa-unit-reports
           if-no-files-found: ignore
@@ -63,17 +65,17 @@ jobs:
       # Input is passed as environment data, never interpolated into a shell command.
       ODEXA_VERSION: ${{ inputs.target_version || 'v0.1.0' }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: actions/setup-java@v4
+      - uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
         with:
           distribution: temurin
           java-version: '25'
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: '3.13'
-      - uses: gradle/actions/setup-gradle@v4
+      - uses: gradle/actions/setup-gradle@9c971963bec38e04b3d30dcc455b5382be2fdbfb # v6.3.0
       - name: Verify Docker tooling
         run: |
           docker version --format '{{.Server.Version}}'
@@ -84,7 +86,7 @@ jobs:
         run: python3 -B scripts/local-ci.py
       - name: Upload only QA results and allowlisted metadata
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: qa-api-reports
           if-no-files-found: ignore

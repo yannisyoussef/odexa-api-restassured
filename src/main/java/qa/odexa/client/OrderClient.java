@@ -7,6 +7,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.UUID;
 import qa.odexa.auth.AuthenticatedSession;
+import qa.odexa.fixture.FixtureMutationSafety;
 import qa.odexa.http.ApiHttp;
 import qa.odexa.http.ApiResponse;
 
@@ -14,17 +15,27 @@ import qa.odexa.http.ApiResponse;
 public final class OrderClient {
   private final ApiHttp http;
   private final AuthenticatedSession session;
+  private final FixtureMutationSafety.FailureLatch mutationSafety;
   private CreationJournal journal;
   private boolean creationBlocked;
 
   public OrderClient(ApiHttp http, AuthenticatedSession session) {
+    this(http, session, null);
+  }
+
+  public OrderClient(
+      ApiHttp http,
+      AuthenticatedSession session,
+      FixtureMutationSafety.FailureLatch mutationSafety) {
     this.http = Objects.requireNonNull(http, "http");
     this.session = session;
+    this.mutationSafety = mutationSafety;
   }
 
   public ApiResponse create(Object body, String key) {
     CreationJournal active;
     synchronized (this) {
+      requireMutationSafe();
       if (creationBlocked) {
         throw new IllegalStateException("Order client is blocked after uncertain fixture cleanup");
       }
@@ -76,6 +87,7 @@ public final class OrderClient {
    * never reaches track() for. Use only this client for checkout while its fixture is acquired.
    */
   public synchronized CreationJournal openCreationJournal() {
+    requireMutationSafe();
     if (creationBlocked) {
       throw new IllegalStateException("Order client is blocked after uncertain fixture cleanup");
     }
@@ -84,6 +96,18 @@ public final class OrderClient {
     }
     journal = new CreationJournal();
     return journal;
+  }
+
+  private void requireMutationSafe() {
+    if (mutationSafety != null) {
+      mutationSafety.requireSafe();
+    }
+  }
+
+  private void blockMutations() {
+    if (mutationSafety != null) {
+      mutationSafety.block();
+    }
   }
 
   public final class CreationJournal implements AutoCloseable {
@@ -114,12 +138,13 @@ public final class OrderClient {
       }
     }
 
-    /** Fail closed for this client after unsafe cleanup; there is deliberately no reset method. */
+    /** Fail closed for this client and its configured fixture scope; there is no reset method. */
     public void abandon() {
       synchronized (OrderClient.this) {
         sealed = true;
         uncertain = true;
         creationBlocked = true;
+        blockMutations();
       }
     }
 
@@ -128,6 +153,9 @@ public final class OrderClient {
       synchronized (OrderClient.this) {
         sealed = true;
         creationBlocked |= uncertain || inFlight != 0;
+        if (creationBlocked) {
+          blockMutations();
+        }
         if (journal == this) {
           journal = null;
         }

@@ -244,6 +244,15 @@ class StockFixtureTest {
       assertFalse(error.toString().contains("private-marker"));
       assertNull(error.getCause());
       int requests = h.server.requests().size();
+      ApiHttp independentHttp = new ApiHttp(h.server.config(true, true));
+      assertThrows(
+          IllegalStateException.class,
+          () ->
+              StockFixture.acquire(
+                  h.server.config(true, true),
+                  new InventoryClient(independentHttp, null),
+                  new OrderClient(independentHttp, null),
+                  8));
       assertThrows(IllegalStateException.class, () -> h.acquire(8));
       assertThrows(
           IllegalStateException.class,
