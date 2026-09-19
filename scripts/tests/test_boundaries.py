@@ -76,6 +76,28 @@ class BoundaryTests(unittest.TestCase):
                                                "# ODEXA_FIXTURE_PASSWORD=example-description\n")
         self.assertEqual(set(), self.rules())
 
+    def test_provisioning_allows_containers_but_never_product_or_data_clients(self):
+        infrastructure = self.root / "src/provisioning/java/qa/odexa/provisioning/Target.java"
+        infrastructure.parent.mkdir(parents=True)
+        infrastructure.write_text('import org.testcontainers.containers.GenericContainer;\n'
+                                  'new ProcessBuilder("git", "clone");\n'
+                                  'String jdbc = "jdbc:postgresql://postgres/catalog";\n')
+        (self.root / "build.gradle.kts").write_text(
+            '    "provisioningImplementation"("org.testcontainers:testcontainers:2.0.4")\n')
+        self.assertEqual(set(), self.rules())
+        infrastructure.write_text('import cc.odexa.orders.OrderApplication;\n'
+                                  'import org.apache.kafka.clients.consumer.KafkaConsumer;\n')
+        self.assertEqual({"product-implementation", "direct-data-client"}, self.rules())
+
+    def test_containers_cannot_leak_to_core_or_normal_test_dependencies(self):
+        self.java.write_text('import org.testcontainers.containers.GenericContainer;\n'
+                             'import com.github.dockerjava.api.DockerClient;\n')
+        self.assertEqual({"direct-infrastructure"}, self.rules())
+        for scope in ("implementation", "testImplementation", "runtimeOnly"):
+            (self.root / "build.gradle.kts").write_text(
+                scope + '("org.testcontainers:testcontainers:2.0.4")\n')
+            self.assertIn("direct-infrastructure-dependency", self.rules())
+
     def test_repository_sources_preserve_standalone_remote_boundary(self):
         # Inspect QA only; no product directory is used to validate REMOTE independence.
         self.assertEqual([], boundaries.violations(SCRIPTS.parent))

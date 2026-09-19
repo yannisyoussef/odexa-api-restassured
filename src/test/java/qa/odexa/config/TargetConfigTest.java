@@ -23,7 +23,7 @@ class TargetConfigTest {
   @Test
   void localDefaultsAreSafeAndOnlyProvisionedActorsExist() {
     TargetConfig config = TargetConfig.load(new Properties(), local());
-    assertEquals(TargetConfig.Mode.LOCAL, config.mode());
+    assertEquals(TargetConfig.Mode.COMPOSE, config.mode());
     assertEquals("http://localhost:8080", config.baseUri().toString());
     assertEquals(
         "http://localhost:8180/realms/odexa/protocol/openid-connect/token",
@@ -72,7 +72,7 @@ class TargetConfigTest {
     assertEquals(TargetConfig.Mode.REMOTE, config.mode());
     assertFalse(config.allowMutation());
     for (String key : env.keySet()) {
-      if (key.equals("ODEXA_ENV")) {
+      if (key.equals("ODEXA_TARGET_MODE")) {
         continue;
       }
       Map<String, String> missing = new HashMap<>(env);
@@ -154,7 +154,7 @@ class TargetConfigTest {
             "ODEXA_PRODUCT_ID", new String[] {"1-1-1-1-1", SECRET},
             "ODEXA_ALLOW_MUTATION", new String[] {"true", SECRET},
             "ODEXA_VERBOSE", new String[] {SECRET},
-            "ODEXA_ENV", new String[] {SECRET});
+            "ODEXA_TARGET_MODE", new String[] {SECRET});
     invalid.forEach(
         (key, values) -> {
           for (String value : values) {
@@ -174,13 +174,39 @@ class TargetConfigTest {
     assertTrue(TargetConfig.load(new Properties(), env).allowMutation());
   }
 
+  @Test
+  void legacyModeCannotSilentlyDowngradeRemoteSafety() {
+    Map<String, String> env = local();
+    env.put("ODEXA_ENV", "remote");
+    assertThrows(IllegalArgumentException.class, () -> TargetConfig.load(new Properties(), env));
+    env.remove("ODEXA_ENV");
+    for (String mode : new String[] {"compose", "testcontainers"}) {
+      env.put("ODEXA_TARGET_MODE", mode);
+      assertEquals(
+          mode.toUpperCase(java.util.Locale.ROOT),
+          TargetConfig.load(new Properties(), env).mode().name());
+    }
+    env.put("ODEXA_TARGET_MODE", "local");
+    assertThrows(IllegalArgumentException.class, () -> TargetConfig.load(new Properties(), env));
+  }
+
+  @Test
+  void remoteAndFrameworkClasspathContainsNoContainerRuntime() {
+    assertThrows(
+        ClassNotFoundException.class,
+        () -> Class.forName("org.testcontainers.DockerClientFactory"));
+    assertThrows(
+        ClassNotFoundException.class,
+        () -> Class.forName("qa.odexa.provisioning.OdexaLauncherSession"));
+  }
+
   private static Map<String, String> local() {
     return new HashMap<>(Map.of("ODEXA_FIXTURE_PASSWORD", SECRET));
   }
 
   private static Map<String, String> remote() {
     Map<String, String> env = new HashMap<>();
-    env.put("ODEXA_ENV", "remote");
+    env.put("ODEXA_TARGET_MODE", "remote");
     env.put("ODEXA_BASE_URL", "https://api.example.test");
     env.put("ODEXA_TOKEN_URL", "https://identity.example.test/token");
     env.put("ODEXA_CLIENT_ID", "explicit-client");

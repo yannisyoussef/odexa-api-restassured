@@ -53,7 +53,7 @@ final class ApiContext {
 
   /** Call only from a test class's BeforeAll method. */
   static ApiContext load(Actor... actors) {
-    TargetConfig config = TargetConfig.fromEnvironment();
+    TargetConfig config = qa.odexa.config.TargetRuntime.current();
     writeReportContext(config);
     return forConfig(config, actors);
   }

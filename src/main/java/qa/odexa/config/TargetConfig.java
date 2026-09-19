@@ -11,7 +11,8 @@ import java.util.UUID;
 /** Immutable target configuration, loaded explicitly by API-test setup, never at discovery time. */
 public final class TargetConfig {
   public enum Mode {
-    LOCAL,
+    COMPOSE,
+    TESTCONTAINERS,
     REMOTE
   }
 
@@ -34,13 +35,16 @@ public final class TargetConfig {
   private final boolean verbose;
 
   private TargetConfig(Properties props, Map<String, String> env) {
-    String environment = value(props, env, "env", "ODEXA_ENV", "local");
+    if (props.containsKey("odexa.env") || env.containsKey("ODEXA_ENV")) {
+      throw invalid("ODEXA_ENV was replaced by ODEXA_TARGET_MODE");
+    }
+    String environment = value(props, env, "targetMode", "ODEXA_TARGET_MODE", "compose");
     try {
       mode = Mode.valueOf(environment.toUpperCase(Locale.ROOT));
     } catch (RuntimeException ignored) {
-      throw invalid("ODEXA_ENV");
+      throw invalid("ODEXA_TARGET_MODE");
     }
-    boolean local = mode == Mode.LOCAL;
+    boolean local = mode != Mode.REMOTE;
     baseUri =
         endpoint(
             value(props, env, "baseUrl", "ODEXA_BASE_URL", local ? "http://localhost:8080" : null),

@@ -1,4 +1,4 @@
-"""Stdlib-only, optional LOCAL orchestration; Java/REMOTE never imports this module."""
+"""Stdlib-only, optional COMPOSE orchestration; Java/REMOTE never imports this module."""
 
 from contextlib import contextmanager
 from dataclasses import dataclass
@@ -142,7 +142,7 @@ def local_qa_environment(password, version, *, allow_mutation=False, exclusive=F
         raise SafeFailure("mutation-requires-exclusive-fixtures")
     env = runtime_environment(source)
     env.update({
-        "ODEXA_ENV": "local",
+        "ODEXA_TARGET_MODE": "compose",
         "ODEXA_VERSION": validate_version(version),
         "ODEXA_BASE_URL": "http://localhost:8080",
         "ODEXA_TOKEN_URL": "http://localhost:8180/realms/odexa/protocol/openid-connect/token",
@@ -165,7 +165,7 @@ class NoRedirect(urllib.request.HTTPRedirectHandler):
 
 
 def http_status(url, timeout):
-    # LOCAL readiness must not forward requests through ambient proxies or follow redirects.
+    # COMPOSE readiness must not forward requests through ambient proxies or follow redirects.
     opener = urllib.request.build_opener(urllib.request.ProxyHandler({}), NoRedirect())
     try:
         with opener.open(url, timeout=timeout) as response:
@@ -296,7 +296,7 @@ def finish_cleanup():
 
 
 def run_isolated(version=BASELINE_VERSION, *, qa_root=QA_ROOT):
-    metadata = {"mode": "local", "result": "failed", "cleanup": "not-created"}
+    metadata = {"mode": "compose", "result": "failed", "cleanup": "not-created"}
     target = None
     compose_attempted = False
     env = runtime_environment()
@@ -406,10 +406,10 @@ def run_isolated(version=BASELINE_VERSION, *, qa_root=QA_ROOT):
                 write_metadata(qa_root, metadata)
             except Exception:
                 exit_code = exit_code or 1
-                print("LOCAL diagnostics could not be written.", file=sys.stderr)
-    print(f"LOCAL suite exit={exit_code}; cleanup={metadata['cleanup']}. QA reports remain.")
+                print("COMPOSE diagnostics could not be written.", file=sys.stderr)
+    print(f"COMPOSE suite exit={exit_code}; cleanup={metadata['cleanup']}. QA reports remain.")
     if "failure_stage" in metadata:
-        print(f"LOCAL failure stage={metadata['failure_stage']}; exit={exit_code}.", file=sys.stderr)
+        print(f"COMPOSE failure stage={metadata['failure_stage']}; exit={exit_code}.", file=sys.stderr)
     if metadata["cleanup"] == "passed":
         print("Owned ephemeral checkout removed; any started project volumes were discarded (not recoverable).")
     elif metadata["cleanup"] == "failed":
@@ -427,16 +427,16 @@ def run_existing(directory, *, version=BASELINE_VERSION, allow_mutation=False, e
         env = local_qa_environment(fixture_password(directory), version,
                                   allow_mutation=allow_mutation, exclusive=exclusive)
         run_api(qa_root, env)
-        print("Existing LOCAL suite passed; no target lifecycle actions performed.")
+        print("Existing COMPOSE suite passed; no target lifecycle actions performed.")
         return 0
     except SafeFailure as failure:
-        print(f"Existing LOCAL suite failed; exit={failure.exit_code}. See QA test reports.", file=sys.stderr)
+        print(f"Existing COMPOSE suite failed; exit={failure.exit_code}. See QA test reports.", file=sys.stderr)
         return failure.exit_code
     except (KeyboardInterrupt, InterruptedError):
-        print("Existing LOCAL suite interrupted; target left running.", file=sys.stderr)
+        print("Existing COMPOSE suite interrupted; target left running.", file=sys.stderr)
         return 130
     except Exception:
-        print("Existing LOCAL suite failed; no target lifecycle actions performed.", file=sys.stderr)
+        print("Existing COMPOSE suite failed; no target lifecycle actions performed.", file=sys.stderr)
         return 1
     finally:
         env.clear()

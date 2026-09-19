@@ -112,7 +112,7 @@ class LifecycleTests(unittest.TestCase):
             self.assertNotIn("recovery", self.metadata)
 
     def test_success_pin_bootstrap_env_bridge_and_owned_cleanup(self):
-        with patch.dict(os.environ, {"ODEXA_ENV": "remote", "ODEXA_CUSTOMER_A_PASSWORD": "wrong",
+        with patch.dict(os.environ, {"ODEXA_TARGET_MODE": "remote", "ODEXA_CUSTOMER_A_PASSWORD": "wrong",
                                      "LOCAL_FIXTURE_PASSWORD": "wrong", "COMPOSE_FILE": "/dev/unsafe",
                                      "COMPOSE_PROJECT_NAME": "developer", "JAVA_TOOL_OPTIONS": "unsafe"}):
             self.assertEqual(0, self.run_target())
@@ -129,7 +129,7 @@ class LifecycleTests(unittest.TestCase):
         self.assertEqual(SENTINEL, api[2]["ODEXA_FIXTURE_PASSWORD"])
         self.assertEqual("true", api[2]["ODEXA_ALLOW_MUTATION"])
         self.assertEqual("true", api[2]["ODEXA_EXCLUSIVE_FIXTURES"])
-        self.assertEqual("local", api[2]["ODEXA_ENV"])
+        self.assertEqual("compose", api[2]["ODEXA_TARGET_MODE"])
         self.assertIn("--no-configuration-cache", api[0])
         for _, _, env, _, _ in self.calls:
             for key in ("COMPOSE_FILE", "LOCAL_FIXTURE_PASSWORD", "JAVA_TOOL_OPTIONS", "ODEXA_CUSTOMER_A_PASSWORD"):
