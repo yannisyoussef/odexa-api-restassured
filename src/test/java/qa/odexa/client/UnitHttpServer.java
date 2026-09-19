@@ -48,7 +48,7 @@ public final class UnitHttpServer implements AutoCloseable {
 
   public TargetConfig config(boolean allowMutation, boolean exclusiveFixtures, UUID productId) {
     Map<String, String> env = new LinkedHashMap<>();
-    env.put("ODEXA_ENV", "local");
+    env.put("ODEXA_TARGET_MODE", "compose");
     env.put("ODEXA_BASE_URL", "http://127.0.0.1:" + server.getAddress().getPort());
     env.put("ODEXA_TOKEN_URL", "http://127.0.0.1:" + server.getAddress().getPort() + "/token");
     env.put("ODEXA_FIXTURE_PASSWORD", "unit-test-placeholder");

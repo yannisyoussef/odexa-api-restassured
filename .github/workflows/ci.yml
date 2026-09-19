@@ -55,9 +55,11 @@ jobs:
             build/test-results/test/*.xml
             build/reports/tests/test/
             build/allure-results/test/
+            build/test-results/provisioningUnitTest/*.xml
+            build/reports/tests/provisioningUnitTest/
 
-  api:
-    name: Black-box API against a pinned LOCAL release
+  compose:
+    name: COMPOSE black-box API against pinned v0.1.0
     needs: fast
     runs-on: ubuntu-24.04
     timeout-minutes: 60
@@ -88,7 +90,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: qa-api-reports
+          name: qa-compose-reports
           if-no-files-found: ignore
           retention-days: 7
           path: |
@@ -96,3 +98,34 @@ jobs:
             build/reports/tests/apiTest/
             build/allure-results/apiTest/
             build/diagnostics/local-target.json
+
+  testcontainers:
+    name: TESTCONTAINERS black-box API against pinned v0.1.0
+    needs: fast
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    env:
+      ODEXA_VERSION: ${{ inputs.target_version || 'v0.1.0' }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
+        with:
+          distribution: temurin
+          java-version: '25'
+      - uses: gradle/actions/setup-gradle@9c971963bec38e04b3d30dcc455b5382be2fdbfb # v6.3.0
+      - name: Provision real services, run shared API scenarios, and clean owned resources
+        run: ./gradlew --no-daemon --no-configuration-cache --console=plain testcontainersTest
+      - name: Upload only QA results and allowlisted provisioning metadata
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: qa-testcontainers-reports
+          if-no-files-found: ignore
+          retention-days: 7
+          path: |
+            build/test-results/testcontainersTest/*.xml
+            build/reports/tests/testcontainersTest/
+            build/allure-results/testcontainersTest/
+            build/diagnostics/testcontainers-target.json

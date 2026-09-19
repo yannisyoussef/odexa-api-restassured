@@ -7,9 +7,9 @@ import sys
 
 ROOT = Path(__file__).resolve().parents[1]
 JAVA_RULES = (
-    ("product-implementation", r"\b(?:import|package)\s+(?:static\s+)?(?:[\w]+\.)*commerce\."),
+    ("product-implementation", r"\b(?:import|package)\s+(?:static\s+)?(?:(?:[\w]+\.)*commerce|cc\.odexa)\."),
     ("direct-infrastructure", r"\bimport\s+(?:static\s+)?(?:java\.sql|javax\.sql|org\.postgresql|"
-     r"org\.apache\.kafka|org\.springframework|org\.testcontainers|com\.zaxxer)\."),
+     r"org\.apache\.kafka|org\.springframework|org\.testcontainers|com\.github\.dockerjava|com\.zaxxer)\."),
     ("product-filesystem", r"(?:ODEXA_(?:DIR|ENV_FILE|REPO)|odexa[.]dir|bootstrap-local[.]py|"
      r"compose-smoke[.]py|odexa_local|[\"\'](?:[^\"\'\n]*/)?\.env[\"\']|"
      r"(?:services|infrastructure|libraries)/|/workspace/odexa(?:/|[\"\']))"),
@@ -19,9 +19,16 @@ JAVA_RULES = (
 BUILD_RULES = (
     ("product-project-dependency", r"\b(?:includeBuild|project)\s*\("),
     ("direct-infrastructure-dependency", r"(?:org\.postgresql|org\.apache\.kafka|org\.springframework|"
-     r"org\.testcontainers|com\.zaxxer|com\.h2database|mysql|mariadb|io\.r2dbc|commerce[:.])"),
+     r"org\.testcontainers|com\.zaxxer|com\.h2database|mysql|mariadb|io\.r2dbc):|commerce[:.]"),
     ("product-orchestration-task", r"(?:bootstrap-local|compose-smoke|local-ci[.]py|run-local[.]py|"
      r"odexa_local|ODEXA_(?:DIR|ENV_FILE|REPO)|\bdocker\s+compose\b)"),
+)
+
+# Packaging and container lifecycle are allowed only in the isolated provisioning source sets.
+PROVISIONING_RULES = (
+    JAVA_RULES[0],
+    ("direct-data-client", r"\bimport\s+(?:static\s+)?(?:java\.sql|javax\.sql|org\.postgresql|"
+     r"org\.apache\.kafka|org\.springframework|com\.zaxxer)\."),
 )
 
 
@@ -35,7 +42,9 @@ def violations(root):
             findings.append(("copied-product-tree", name, 1))
     for path in root.glob("*compose*.y*ml"):
         findings.append(("copied-compose", path.name, 1))
-    inputs = [(path, JAVA_RULES) for path in sorted((root / "src").rglob("*.java"))]
+    inputs = [(path, PROVISIONING_RULES if path.relative_to(root).parts[1]
+               in ("provisioning", "provisioningTest") else JAVA_RULES)
+              for path in sorted((root / "src").rglob("*.java"))]
     inputs += [(path, BUILD_RULES) for path in sorted(root.glob("*.gradle*")) if path.is_file()]
     catalog = root / "gradle" / "libs.versions.toml"
     if catalog.is_file():
@@ -47,6 +56,10 @@ def violations(root):
             continue
         for number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
             for rule, pattern in rules:
+                if (rule == "direct-infrastructure-dependency"
+                        and re.fullmatch(r'\s*"provisioningImplementation"\((?:platform\()?'
+                                         r'"org\.testcontainers:[a-z0-9:.-]+"\)\)?\s*', line)):
+                    continue
                 if re.search(pattern, line, re.IGNORECASE):
                     findings.append((rule, relative, number))
     example = root / ".env.example"
